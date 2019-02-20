@@ -35,6 +35,16 @@ open class FoldingTableView: UITableView, FoldingTableHeaderViewDelegate {
         self.delegate = self
     }
     
+    // MARK: - Public Methods
+    
+    public func foldingTableHeaderViewInSeciton(_ section: Int) -> FoldingTableHeaderView? {
+        let reuseIdentifier = "tableView.folding.header.identifier.\(section)"
+        if let reuseableHeader = reuseableHeaders[reuseIdentifier] {
+            return reuseableHeader
+        }
+        return nil
+    }
+    
     // MARK: - FoldingTableHeaderViewDelegate
     
     public func foldingTableHeaderView(_ foldingTableHeaderView: FoldingTableHeaderView, didSelectHeaderInSection section: Int) {
@@ -59,11 +69,15 @@ open class FoldingTableView: UITableView, FoldingTableHeaderViewDelegate {
                 self.deleteRows(at: indexPaths, with: .top)
             }
             
+            /// Refrence: https://stackoverflow.com/questions/16071503/how-to-tell-when-uitableview-has-completed-reloaddata
+            
             DispatchQueue.main.async {
                 self.foldingDelegate?.foldingTableView(self, headerEndTransitionInSection: section, forState: state)
             }
         }
     }
+    
+    // MARK: - Private Methods
     
     private func state(for section: Int) -> FoldingTableViewFoldState {
         if let state = foldingDelegate?.foldingTableView(self, foldingStateForHeaderInSection: section) {
@@ -114,7 +128,7 @@ open class FoldingTableView: UITableView, FoldingTableHeaderViewDelegate {
 extension FoldingTableView: UITableViewDataSource {
     
     public func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        let reuseIdentifier = "folding.header.identifier.\(section)"
+        let reuseIdentifier = "tableView.folding.header.identifier.\(section)"
         
         if let rows = foldingDataSource?.foldingTableView(self, numberOfRowsInSection: section),
             let header = reuseableHeaders[reuseIdentifier],
@@ -179,7 +193,7 @@ extension FoldingTableView: UITableViewDataSource {
     public func tableView(_ tableView: UITableView, moveRowAt sourceIndexPath: IndexPath, to destinationIndexPath: IndexPath) {
         foldingDataSource?.foldingTableView(self, moveRowAt: sourceIndexPath, to: destinationIndexPath)
     }
-
+    
 }
 
 // MARK: - UITableView Delegates
@@ -187,20 +201,38 @@ extension FoldingTableView: UITableViewDataSource {
 extension FoldingTableView: UITableViewDelegate {
     
     public func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
-        let reuseIdentifier = "folding.header.identifier.\(section)"
+        let reuseIdentifier = "tableView.folding.header.identifier.\(section)"
         
         var header: FoldingTableHeaderView
         
         if let reuseableHeader = reuseableHeaders[reuseIdentifier] {
             header = reuseableHeader
         } else {
-            header = FoldingTableHeaderView(frame: CGRect(x: 0.0, y: 0.0, width: tableView.frame.width, height: self.tableView(tableView, heightForHeaderInSection: section)),
+            header = FoldingTableHeaderView(frame: CGRect(width: tableView.frame.width, height: self.tableView(tableView, heightForHeaderInSection: section)),
                                             state: state(for: section),
                                             indicatorPosition: indicatorPosition(for: section),
                                             section: section,
                                             reuseIdentifier: reuseIdentifier)
             reuseableHeaders[reuseIdentifier] = header
+            header.prepareForReuse()
             header.delegate = self
+            
+            if let customView = customView(for: section) {
+                header.customView = customView
+            } else {
+                header.descriptionTextLabel.attributedText = attributedDescriptionText(for: section)
+                header.titleTextLabel.attributedText = attributedTitleText(for: section)
+                header.indicatorImageView.image = indicatorImage(for: section)
+                
+                if let backgroundColor = backgroundColor(for: section) {
+                    header.contentView.backgroundColor = backgroundColor
+                } else if let image = backgroundImage(for: section) {
+                    header.contentView.image = image
+                } else {
+                    header.contentView.backgroundColor = UIColor.groupTableViewBackground
+                    header.contentView.image = nil
+                }
+            }
             
             if case .expand = state(for: section), let rows = foldingDataSource?.foldingTableView(self, numberOfRowsInSection: section) {
                 var indexPaths = [IndexPath]()
@@ -209,25 +241,6 @@ extension FoldingTableView: UITableViewDelegate {
                 }
                 self.insertRows(at: indexPaths, with: .top)
             }
-        }
-        
-        header.prepareForReuse()
-        
-        if let customView = customView(for: section) {
-            header.customView = customView
-        } else {
-            header.descriptionTextLabel.attributedText = attributedDescriptionText(for: section)
-            header.titleTextLabel.attributedText = attributedTitleText(for: section)
-            header.indicatorImageView.image = indicatorImage(for: section)
-        }
-        
-        if let backgroundColor = backgroundColor(for: section) {
-            header.contentView.backgroundColor = backgroundColor
-        } else if let image = backgroundImage(for: section) {
-            header.contentView.image = image
-        } else {
-            header.contentView.backgroundColor = UIColor.groupTableViewBackground
-            header.contentView.image = nil
         }
         
         header.setupConstraints()

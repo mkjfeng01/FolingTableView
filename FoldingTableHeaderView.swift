@@ -32,7 +32,14 @@ open class FoldingTableHeaderView: UIView {
     public weak var delegate: FoldingTableHeaderViewDelegate?
     
     public lazy var contentView = UIImageView()
-    public var customView: UIView?
+    
+    public var customView: UIView? {
+        didSet {
+            if let custom = self.customView {
+                self.addSubview(custom)
+            }
+        }
+    }
     
     public lazy var indicatorImageView: UIImageView = {
         let imageView = UIImageView()
@@ -92,7 +99,6 @@ open class FoldingTableHeaderView: UIView {
         tapGesture.numberOfTapsRequired = 1
         addGestureRecognizer(tapGesture)
         
-        contentView.backgroundColor = .purple
         contentView.frame = frame
         addSubview(contentView)
         
@@ -101,24 +107,22 @@ open class FoldingTableHeaderView: UIView {
         contentView.addSubview(indicatorImageView)
     }
     
+    convenience init(frame: CGRect, state: FoldingTableViewFoldState = .fold, indicatorPosition: FoldingTableViewIndicatorPosition = .leading, section: Int) {
+        let reuseIdentifier = "tableView.folding.header.identifier.\(section)"
+        self.init(frame: frame, state: state, indicatorPosition: indicatorPosition, section: section, reuseIdentifier: reuseIdentifier)
+    }
+    
+    convenience init(customView: UIView, section: Int) {
+        self.init(frame: .zero, state: .fold, indicatorPosition: .leading, section: section)
+        self.customView = customView
+    }
+    
+    convenience init(section: Int) {
+        self.init(frame: .zero, state: .fold, indicatorPosition: .leading, section: section)
+    }
+    
     public func setupConstraints() {
         for constraint in self.constraints { removeConstraint(constraint) }
-        
-        let views =  ["indicatorImageView": indicatorImageView, "titleTextLabel": titleTextLabel, "descriptionTextLabel": descriptionTextLabel]
-        let metrics = ["padding": FoldingTableHeaderUX.padding, "margin": FoldingTableHeaderUX.margin]
-        
-        /// Shold always setup constraints for contentView, even if `customView` was set.
-        
-        for view in views.values {
-            view.backgroundColor = .orange
-            contentView.addConstraint(NSLayoutConstraint(item: view,
-                                                         attribute: .centerY,
-                                                         relatedBy: .equal,
-                                                         toItem: contentView,
-                                                         attribute: .centerY,
-                                                         multiplier: 1.0,
-                                                         constant: 0.0))
-        }
         
         if let customView = customView, contentView.subviews.contains(customView) {
             contentView.addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|-(margin)-[customView]-(margin)-|",
@@ -126,6 +130,22 @@ open class FoldingTableHeaderView: UIView {
                                                                       metrics: ["margin": FoldingTableHeaderUX.margin],
                                                                       views: ["customView": customView]))
         } else {
+            
+            let views =  ["indicatorImageView": indicatorImageView, "titleTextLabel": titleTextLabel, "descriptionTextLabel": descriptionTextLabel]
+            let metrics = ["padding": FoldingTableHeaderUX.padding, "margin": FoldingTableHeaderUX.margin]
+            
+            /// Shold always setup constraints for contentView, even if `customView` was set.
+            
+            for view in views.values {
+                contentView.addConstraint(NSLayoutConstraint(item: view,
+                                                             attribute: .centerY,
+                                                             relatedBy: .equal,
+                                                             toItem: contentView,
+                                                             attribute: .centerY,
+                                                             multiplier: 1.0,
+                                                             constant: 0.0))
+            }
+            
             if case .leading = indicatorPosition {
                 contentView.addConstraints(
                     NSLayoutConstraint.constraints(withVisualFormat: "H:|-(margin)-[indicatorImageView]-(padding)-[titleTextLabel]-(padding)-[descriptionTextLabel]-(margin)-|",
@@ -140,20 +160,18 @@ open class FoldingTableHeaderView: UIView {
         }
     }
     
-    public func prepareForReuse() {
-        indicatorImageView.image = nil
-        titleTextLabel.attributedText = nil
-        descriptionTextLabel.attributedText = nil
-    }
-    
-    @objc private func onTapGesture(_ sender: UITapGestureRecognizer) {
+    @objc public func onTapGesture(_ sender: UITapGestureRecognizer) {
         if isTransforming { return }
         state = (state == .fold) ? .expand : .fold
-        shouldMakeTransform(true)
+        
+        if customView == nil {
+            shouldMakeTransform(true)
+        }
+        
         delegate?.foldingTableHeaderView(self, didSelectHeaderInSection: section)
     }
     
-    private func shouldMakeTransform(_ aniamted: Bool) {
+    public func shouldMakeTransform(_ animated: Bool) {
         if let customView = customView, contentView.subviews.contains(customView) {
             /// Custom view has been set, the transition animation excute outside.
             return
@@ -161,18 +179,24 @@ open class FoldingTableHeaderView: UIView {
         
         isTransforming = true
         
-        UIView.animate(withDuration: aniamted ? 0.2 : 0.0,
+        UIView.animate(withDuration: animated ? 0.2 : 0.0,
                        animations: {
-            var angle: CGFloat = 0.0
-            if self.state == .fold {
-                angle = (self.indicatorPosition == .leading) ? 0.0 : CGFloat.pi
-            } else {
-                angle = CGFloat.pi/2
-            }
-            self.indicatorImageView.transform = CGAffineTransform(rotationAngle: angle)
+                        var angle: CGFloat = 0.0
+                        if self.state == .fold {
+                            angle = (self.indicatorPosition == .leading) ? 0.0 : CGFloat.pi
+                        } else {
+                            angle = CGFloat.pi/2
+                        }
+                        self.indicatorImageView.transform = CGAffineTransform(rotationAngle: angle)
         }) { _ in
             self.isTransforming = false
         }
+    }
+    
+    public func prepareForReuse() {
+        descriptionTextLabel.attributedText = nil
+        titleTextLabel.attributedText = nil
+        indicatorImageView.image = nil
     }
     
     required public init?(coder aDecoder: NSCoder) {
